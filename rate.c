@@ -5,107 +5,115 @@
 #define MAX_TASKS 10
 
 typedef struct {
-  char name[20];
-  int period;
+  char nomeProcesso[20];
+  int periodo;
   int cpuBurst;
   int deadline;
-  int remainingTime;
-  int executions;
-  int lostDeadlines;
-  int killed;
-} Task;
+  int tempoRestante;
+  int execucaoCompleta;
+  int execucaoPerdida;
+  int execucaoKill;
+} Processos;
 
-int findNextTask(Task tasks[], int n, int currentTime) {
-  for (int i = 0; i < n; i++) {
-    if (tasks[i].remainingTime > 0 &&
-        currentTime >= tasks[i].deadline - tasks[i].period) {
-      return i;
+int proximoProcesso(Processos processo[], int quantidadeProcessos, int tempoAtual) {
+  for (int indexProximo = 0; indexProximo < quantidadeProcessos; indexProximo++) {
+    if (processo[indexProximo].tempoRestante > 0 &&
+        tempoAtual >= processo[indexProximo].deadline - processo[indexProximo].periodo) {
+      return indexProximo;
     }
   }
   return -1;
 }
 
-void simulateTasks(Task tasks[], int n, int totalTime) {
-  int currentTime = 0;
-  int currentTaskIndex = -1;
-  int lastTaskIndex = -1;
-  int lastTaskUnits = 0;
-  int idleTime = 0;
+void escalonamentoRateMonotonic(Processos processo[], int n, int tempoTotal) {
+  int tempoAtual = 0;
+  int indexProcessoAtual = -1;
+  int indexUltimoProcesso = -1;
+  int unidadesUltimoProcesso = 0;
+  int idle = 0;
 
   for (int i = 0; i < n; i++) {
-    tasks[i].remainingTime = tasks[i].cpuBurst;
-    tasks[i].deadline = tasks[i].period;
-    tasks[i].executions = 0;
-    tasks[i].lostDeadlines = 0;
-    tasks[i].killed = 0;
+    processo[i].tempoRestante = processo[i].cpuBurst;
+    processo[i].deadline = processo[i].periodo;
+    processo[i].execucaoCompleta = 0;
+    processo[i].execucaoPerdida = 0;
+    processo[i].execucaoKill = 0;
   }
 
-  while (currentTime < totalTime) {
-    currentTaskIndex = findNextTask(tasks, n, currentTime);
-
-    if (currentTaskIndex == -1) {
-      idleTime++;
-      printf("idle - %d no tempo %d\n", idleTime, currentTime);
-    } else {
-      if (idleTime > 0) {
-        printf("idle for %d units\n", idleTime);
-        idleTime = 0;
-      }
-
-      Task *currentTask = &tasks[currentTaskIndex];
-      currentTask->remainingTime--;
-      lastTaskUnits++;
-
-      printf("Executando %s - %d no tempo %d, CPU Remaning: %d, DL %d\n", currentTask->name, lastTaskUnits, currentTime, currentTask->remainingTime, currentTask->deadline);
-
-      if (currentTask->remainingTime == 0) {
-        currentTask->executions++;
-        currentTask->deadline += currentTask->period;
-        currentTask->remainingTime = currentTask->cpuBurst;
-        printf("[%s] for %d units - F\n", currentTask->name, lastTaskUnits);
-        lastTaskUnits = 0;
-      }
-
-      if (currentTime >= (currentTask->deadline) - 1 && currentTask->remainingTime > 0) {
-        currentTask->lostDeadlines++;
-        currentTask->deadline += currentTask->period;
-        currentTask->remainingTime = currentTask->cpuBurst;
-        printf("[%s] for %d units - L\n", currentTask->name, lastTaskUnits);
-        lastTaskUnits = 0;
-      }
-
-      lastTaskIndex = currentTaskIndex;
+  while (tempoAtual < tempoTotal) {
+    indexProcessoAtual = proximoProcesso(processo, n, tempoAtual);
+    if (indexUltimoProcesso != -1 && indexUltimoProcesso != indexProcessoAtual && processo[indexUltimoProcesso].tempoRestante > 0 && unidadesUltimoProcesso > 0) {
+      printf("[%s] for %d units - H\n", processo[indexUltimoProcesso].nomeProcesso, unidadesUltimoProcesso);
+      unidadesUltimoProcesso = 0;
     }
 
-    currentTime++;
+    if (indexProcessoAtual == -1) {
+      idle++;
+      printf("idle - %d no tempo %d\n", idle, tempoAtual);
+    } else {
+      if (idle > 0) {
+        printf("idle for %d units\n", idle);
+        idle = 0;
+      }
+
+      Processos *processoAtual = &processo[indexProcessoAtual];
+      processoAtual->tempoRestante--;
+      unidadesUltimoProcesso++;
+
+      printf("Executando %s - %d no tempo %d, CPU Remaning: %d, DL %d\n", processoAtual->nomeProcesso, unidadesUltimoProcesso, tempoAtual, processoAtual->tempoRestante, processoAtual->deadline);
+
+      if (processoAtual->tempoRestante == 0) {
+        processoAtual->execucaoCompleta++;
+        processoAtual->deadline += processoAtual->periodo;
+        processoAtual->tempoRestante = processoAtual->cpuBurst;
+        printf("[%s] for %d units - F\n", processoAtual->nomeProcesso, unidadesUltimoProcesso);
+        unidadesUltimoProcesso = 0;
+      }
+
+      if (tempoAtual >= (processoAtual->deadline) - 1 && processoAtual->tempoRestante > 0) {
+        processoAtual->execucaoPerdida++;
+        processoAtual->deadline += processoAtual->periodo;
+        processoAtual->tempoRestante = processoAtual->cpuBurst;
+        printf("[%s] for %d units - L\n", processoAtual->nomeProcesso, unidadesUltimoProcesso);
+        unidadesUltimoProcesso = 0;
+      }
+    }
+
+    indexUltimoProcesso = indexProcessoAtual;
+    tempoAtual++;
   }
 
-  if (idleTime > 0) {
-    printf("Idle for %d units\n", idleTime);
+  for (int i = 0; i < n; i++) {
+    if (processo[i].tempoRestante > 0) {
+      processo[i].execucaoKill++;
+    }
   }
-  if (lastTaskIndex != -1 && tasks[lastTaskIndex].remainingTime > 0 && lastTaskUnits > 0) {
-    tasks[lastTaskIndex].killed++;
-    printf("[%s] for %d units - K\n", tasks[lastTaskIndex].name, lastTaskUnits);
+  if (idle > 0) {
+    printf("Idle for %d units\n", idle);
+  }
+  if (indexUltimoProcesso != -1 && processo[indexUltimoProcesso].tempoRestante > 0 && unidadesUltimoProcesso > 0) {
+    printf("[%s] for %d units - K\n", processo[indexUltimoProcesso].nomeProcesso, unidadesUltimoProcesso);
   }
 }
 
 
-void printReport(Task tasks[], int n) {
+
+void printar(Processos processo[], int n) {
   printf("\nRelatório Final:\n");
   for (int i = 0; i < n; i++) {
-    printf("Tarefa %s: Deadlines perdidos: %d,Execução completa: %d, Processo Finalizado: %d\n",
-           tasks[i].name, tasks[i].lostDeadlines, tasks[i].executions, tasks[i].killed);
+    printf("Tarefa %s: Deadlines perdidos: %d,Execução completa: %d, Processo Killed: %d\n",
+           processo[i].nomeProcesso, processo[i].execucaoPerdida, processo[i].execucaoCompleta, processo[i].execucaoKill);
   }
 }
 
 int main() {
-  Task tasks[MAX_TASKS] = {
+  Processos processo[MAX_TASKS] = {
       {"T1", 50, 25}, {"T2", 80, 35},
   };
-  int totalTime = 165;
+  int tempoTotal = 165;
 
-  simulateTasks(tasks, 2, totalTime);
-  printReport(tasks, 2);
+  escalonamentoRateMonotonic(processo, 2, tempoTotal);
+  printar(processo, 2);
 
   return 0;
 }
